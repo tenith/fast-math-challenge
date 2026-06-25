@@ -28,6 +28,7 @@
     MAX_2_DIGIT: 99,
     MIN_3_DIGIT: 100,
     MAX_3_DIGIT: 999,
+    MAX_RESULT: 999,            // answers (and intermediate steps) never exceed this
     MAX_HISTORY: 100,
     STORAGE_KEYS: {
       nickname: "fmc_nickname",
@@ -91,30 +92,40 @@
       return { text, answer };
     }
 
-    // Section 1 & 2: a ± b, with operands in [min, max]. No negatives.
+    // Section 1 & 2: a ± b, operands in [min, max].
+    // No negatives, and the answer never exceeds CONFIG.MAX_RESULT.
     function twoTerm(min, max) {
+      const cap = CONFIG.MAX_RESULT;
       const op = randSign();
+      if (op === "+") {
+        // Keep a + b <= cap: pick a, then b within the remaining budget.
+        const a = randInt(min, Math.min(max, cap - min));
+        const b = randInt(min, Math.min(max, cap - a));
+        return makeQuestion(`${a} + ${b}`, a + b);
+      }
+      // Subtraction: swap so a >= b → answer >= 0 (always <= cap).
       let a = randInt(min, max);
       let b = randInt(min, max);
-      if (op === "-" && b > a) {
-        const t = a; a = b; b = t; // swap so a >= b → answer >= 0
+      if (b > a) {
+        const t = a; a = b; b = t;
       }
-      const answer = op === "+" ? a + b : a - b;
-      return makeQuestion(`${a} ${op} ${b}`, answer);
+      return makeQuestion(`${a} - ${b}`, a - b);
     }
 
-    // Section 3: a ± b ± c (no parentheses), left-to-right, no negatives.
+    // Section 3: a ± b ± c (no parentheses), evaluated left-to-right.
+    // Every step stays within [0, CONFIG.MAX_RESULT].
     function threeTerm(min, max) {
-      for (let attempts = 0; attempts < 50; attempts++) {
+      const cap = CONFIG.MAX_RESULT;
+      for (let attempts = 0; attempts < 100; attempts++) {
         const a = randInt(min, max);
         const b = randInt(min, max);
         const c = randInt(min, max);
         const op1 = randSign();
         const op2 = randSign();
         const step1 = op1 === "+" ? a + b : a - b;
-        if (step1 < 0) continue;
+        if (step1 < 0 || step1 > cap) continue;
         const answer = op2 === "+" ? step1 + c : step1 - c;
-        if (answer < 0) continue;
+        if (answer < 0 || answer > cap) continue;
         return makeQuestion(`${a} ${op1} ${b} ${op2} ${c}`, answer);
       }
       // Guaranteed-valid fallback (should effectively never run).
