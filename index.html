@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#5b6cff" />
+  <meta name="description" content="Fast Math Challenge — a fun mental math game for Primary 2 students. 40 questions, 10 minutes, medals and achievements!" />
+  <title>Fast Math Challenge ⚡</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>" />
+</head>
+<body>
+  <!-- App shell. Only one .screen is visible at a time (toggled by JS). -->
+  <div id="app">
+
+    <!-- ============ LANDING SCREEN ============ -->
+    <section id="screen-landing" class="screen is-active" aria-label="Welcome">
+      <div class="container">
+        <header class="hero">
+          <div class="hero__badge">⚡ Primary 2</div>
+          <h1 class="hero__title">Fast Math <span class="hero__title-accent">Challenge</span></h1>
+          <p class="hero__subtitle">
+            Solve 40 mental math questions in 10 minutes.
+            Earn medals, build streaks, and become a Math Master! 🚀
+          </p>
+        </header>
+
+        <div class="card start-card">
+          <label class="field" for="nickname-input">
+            <span class="field__label">What's your nickname?</span>
+            <input
+              id="nickname-input"
+              class="field__input"
+              type="text"
+              maxlength="20"
+              autocomplete="off"
+              placeholder="e.g. SuperStar"
+              aria-required="true"
+            />
+            <span id="nickname-error" class="field__error" role="alert" hidden>
+              Please enter a nickname to start.
+            </span>
+          </label>
+
+          <button id="start-btn" class="btn btn--primary btn--block">
+            Start Challenge →
+          </button>
+        </div>
+
+        <!-- Quick historical summary -->
+        <div class="card summary-card">
+          <h2 class="card__title">📊 Your Stats</h2>
+          <div id="landing-summary" class="summary-grid">
+            <!-- Populated by JS -->
+          </div>
+          <button id="view-dashboard-btn" class="btn btn--ghost btn--block">
+            View Full Dashboard
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ CHALLENGE SCREEN ============ -->
+    <section id="screen-challenge" class="screen" aria-label="Challenge">
+      <!-- Sticky top bar: timer + progress -->
+      <div class="quiz-bar">
+        <div class="container quiz-bar__inner">
+          <div class="timer" id="timer">
+            <span class="timer__icon">⏱️</span>
+            <span class="timer__value" id="timer-value">10:00</span>
+          </div>
+
+          <div class="progress">
+            <div class="progress__label">
+              Completed <strong id="progress-count">0</strong> / 40
+              <span class="progress__pct" id="progress-pct">0%</span>
+            </div>
+            <div class="progress__track" role="progressbar" aria-valuemin="0" aria-valuemax="40" aria-valuenow="0" id="progress-bar-wrap">
+              <div class="progress__fill" id="progress-fill"></div>
+            </div>
+          </div>
+
+          <button id="finish-btn" class="btn btn--primary btn--sm">Finish Challenge</button>
+        </div>
+      </div>
+
+      <div class="container">
+        <div class="quiz-greeting">
+          Good luck, <strong id="player-name">Player</strong>! ✨
+        </div>
+        <form id="quiz-form" class="quiz-grid" autocomplete="off">
+          <!-- Question cards injected by JS -->
+        </form>
+
+        <div class="quiz-footer">
+          <button type="button" id="finish-btn-bottom" class="btn btn--primary btn--block">
+            Finish Challenge
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ RESULTS SCREEN ============ -->
+    <section id="screen-results" class="screen" aria-label="Results">
+      <div class="container">
+        <div class="card result-hero" id="result-hero">
+          <div class="result-medal" id="result-medal">🥇</div>
+          <h2 class="result-rating" id="result-rating">Gold</h2>
+          <div class="result-score" id="result-score">35 / 40</div>
+          <p class="result-name">Well done, <strong id="result-name">Player</strong>!</p>
+        </div>
+
+        <div class="card">
+          <h2 class="card__title">📈 Statistics</h2>
+          <div class="stats-grid" id="result-stats">
+            <!-- Populated by JS -->
+          </div>
+        </div>
+
+        <div id="new-achievements" class="card achievements-card" hidden>
+          <h2 class="card__title">🎉 New Achievements!</h2>
+          <div id="new-achievements-list" class="badge-row"></div>
+        </div>
+
+        <div class="result-actions">
+          <button id="review-btn" class="btn btn--secondary btn--block">Review Answers</button>
+          <button id="retry-btn" class="btn btn--primary btn--block">Play Again</button>
+          <button id="results-dashboard-btn" class="btn btn--ghost btn--block">Dashboard</button>
+          <button id="results-home-btn" class="btn btn--ghost btn--block">Home</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ REVIEW SCREEN ============ -->
+    <section id="screen-review" class="screen" aria-label="Review">
+      <div class="container">
+        <header class="page-head">
+          <h2 class="page-head__title">📝 Review Answers</h2>
+          <button id="review-back-btn" class="btn btn--ghost btn--sm">← Back to Results</button>
+        </header>
+        <div class="review-legend">
+          <span class="legend legend--correct">Correct</span>
+          <span class="legend legend--wrong">Incorrect</span>
+        </div>
+        <div id="review-list" class="quiz-grid review-grid"></div>
+        <div class="quiz-footer">
+          <button id="review-home-btn" class="btn btn--primary btn--block">Back to Home</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ DASHBOARD SCREEN ============ -->
+    <section id="screen-dashboard" class="screen" aria-label="Dashboard">
+      <div class="container">
+        <header class="page-head">
+          <h2 class="page-head__title">🏆 Dashboard</h2>
+          <button id="dashboard-home-btn" class="btn btn--ghost btn--sm">← Home</button>
+        </header>
+
+        <div class="stats-grid" id="dashboard-stats">
+          <!-- Populated by JS -->
+        </div>
+
+        <div class="card">
+          <h2 class="card__title">🎖️ Achievements</h2>
+          <div id="dashboard-achievements" class="badge-row"></div>
+        </div>
+
+        <div class="card">
+          <h2 class="card__title">🕒 Recent Attempts</h2>
+          <div class="table-wrap">
+            <table class="attempts-table" id="attempts-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Score</th>
+                  <th>Completion</th>
+                  <th>Correctness</th>
+                  <th>Time</th>
+                </tr>
+              </thead>
+              <tbody id="attempts-tbody">
+                <!-- Populated by JS -->
+              </tbody>
+            </table>
+          </div>
+          <button id="clear-history-btn" class="btn btn--ghost btn--block btn--danger">
+            Clear History
+          </button>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- Toast container for transient messages -->
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="script.js"></script>
+</body>
+</html>
