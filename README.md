@@ -1,6 +1,6 @@
 # ⚡ Fast Math Challenge
 
-A friendly, colorful mental-math game for **Primary 2** students. Solve **40 questions in 10 minutes**, earn medals, build streaks, and track your progress over time — all in the browser, with **no backend and no database**.
+A friendly, colorful mental-math game for **Primary 2** students. Solve **40 questions in 10 minutes** — covering addition, subtraction, and multiplication — earn medals, build streaks, and track your progress over time — all in the browser, with **no backend and no database**.
 
 Built with **pure HTML, CSS, and vanilla JavaScript**. Data is saved locally in your browser via **LocalStorage**, so every player's history stays on their own device.
 
@@ -8,8 +8,13 @@ Built with **pure HTML, CSS, and vanilla JavaScript**. Data is saved locally in 
 
 ## ✨ Features
 
-- **40 randomized questions** per attempt using 3-digit numbers, e.g. `150 + (234 - 129) = ____`
-  - Question shapes: `a + (b - c)`, `a - (b - c)`, `a + (b + c)`, `a - (b + c)`
+- **40 randomized questions** per attempt, organized into four sections of 10:
+  | Questions | Format | Example |
+  |-----------|--------|---------|
+  | 1–10 | 2-digit ± 2-digit | `86 - 13 = ____` |
+  | 11–20 | 3-digit ± 3-digit | `968 - 302 = ____` |
+  | 21–30 | 3-digit ± 3-digit ± 3-digit (no parentheses, left-to-right) | `721 - 642 + 765 = ____` |
+  | 31–40 | 1-digit × 1-digit | `9 × 6 = ____` |
   - Guaranteed **no negative intermediate or final answers**
 - **10-minute countdown timer** — large, always visible, sticky on mobile, with a warning animation in the final 60 seconds
 - **Auto-submit** when time runs out, or finish early with one tap
@@ -123,7 +128,7 @@ There is no server and no tracking. All data (nickname, attempt history, achieve
 
 ## 🧩 Technical Notes
 
-- **Question generation** retries across the four allowed shapes until every constraint is satisfied (3-digit operands, non-negative intermediate and final values, answers preferably within 0–999).
+- **Question generation** builds four fixed sections (2-digit ±, 3-digit ±, 3-digit ± ± three-term left-to-right, and 1-digit × 1-digit), retrying where needed so every constraint is satisfied (operands stay within their digit range, no negative intermediate or final values).
 - **State management** is split into small modules inside one IIFE: `Storage`, `QuestionGen`, `Achievements`, `Stats`, `UI`, `Quiz`, and `App`.
 - **Error handling**: the LocalStorage wrapper degrades gracefully in private-browsing mode or when storage is full.
 - **Browser support**: any modern browser (Chrome, Edge, Firefox, Safari) on desktop or mobile.
