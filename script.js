@@ -19,8 +19,13 @@
      ---------------------------------------------------------------------- */
   const CONFIG = Object.freeze({
     QUESTION_COUNT: 40,
+    SECTION_SIZE: 10,            // questions per guideline section
     TIME_LIMIT_SECONDS: 10 * 60, // 10 minutes
     WARNING_SECONDS: 60,         // last-minute warning animation
+    MIN_1_DIGIT: 1,
+    MAX_1_DIGIT: 9,
+    MIN_2_DIGIT: 10,
+    MAX_2_DIGIT: 99,
     MIN_3_DIGIT: 100,
     MAX_3_DIGIT: 999,
     MAX_HISTORY: 100,
@@ -65,94 +70,72 @@
   /* ----------------------------------------------------------------------
      QuestionGen — produces random mental-math questions.
 
-     Allowed shapes (all use 3-digit operands, no negatives anywhere):
-       a + (b - c)
-       a - (b - c)
-       a + (b + c)
-       a - (b + c)
+     Question set follows the school guideline, 10 questions per section:
+       Section 1 (Q1-10):  2-digit  ± 2-digit
+       Section 2 (Q11-20): 3-digit  ± 3-digit
+       Section 3 (Q21-30): 3-digit  ± 3-digit  ± 3-digit   (no parentheses,
+                           evaluated left-to-right)
+       Section 4 (Q31-40): 1-digit  × 1-digit
      Constraints:
-       - operands are 3-digit (100..999)
-       - inner result >= 0  (b >= c for the "-" inner form)
-       - final answer >= 0
-       - prefer final answer in 0..999
+       - no negative intermediate or final answers
+       - operands stay within their stated digit ranges
      ---------------------------------------------------------------------- */
   const QuestionGen = (function () {
     function randInt(min, max) {
       return Math.floor(Math.random() * (max - min + 1)) + min;
     }
-    function rand3() {
-      return randInt(CONFIG.MIN_3_DIGIT, CONFIG.MAX_3_DIGIT);
+    function randSign() {
+      return Math.random() < 0.5 ? "+" : "-";
+    }
+    function makeQuestion(text, answer) {
+      return { text, answer };
     }
 
-    // Each builder returns {a,b,c,inner,outer,answer,text} or null if invalid.
-    const builders = [
-      // a + (b - c)  → keep answer <= 999
-      function plusMinus() {
-        const a = rand3();
-        const b = rand3();
-        const c = randInt(CONFIG.MIN_3_DIGIT, b); // c <= b → inner >= 0
-        const inner = b - c;
-        const answer = a + inner;
-        if (answer > CONFIG.MAX_3_DIGIT) return null;
-        return make(a, "+", b, "-", c, inner, answer);
-      },
-      // a - (b - c)  → need a >= inner so answer >= 0
-      function minusMinus() {
-        const b = rand3();
-        const c = randInt(CONFIG.MIN_3_DIGIT, b);
-        const inner = b - c;
-        const a = randInt(Math.max(CONFIG.MIN_3_DIGIT, inner), CONFIG.MAX_3_DIGIT);
-        const answer = a - inner;
-        return make(a, "-", b, "-", c, inner, answer);
-      },
-      // a + (b + c)  → need a+b+c <= 999
-      function plusPlus() {
-        const a = rand3();
-        // budget left for b + c so total stays <= 999
-        const remaining = CONFIG.MAX_3_DIGIT - a;
-        if (remaining < CONFIG.MIN_3_DIGIT * 2) return null; // can't fit two 3-digit numbers
-        const b = randInt(CONFIG.MIN_3_DIGIT, remaining - CONFIG.MIN_3_DIGIT);
-        const c = randInt(CONFIG.MIN_3_DIGIT, remaining - b);
-        const inner = b + c;
-        const answer = a + inner;
-        return make(a, "+", b, "+", c, inner, answer);
-      },
-      // a - (b + c)  → need a >= b + c so answer >= 0
-      function minusPlus() {
-        const b = rand3();
-        // c must satisfy b + c <= 999 so that an a >= b+c exists
-        const cMax = CONFIG.MAX_3_DIGIT - b;
-        if (cMax < CONFIG.MIN_3_DIGIT) return null;
-        const c = randInt(CONFIG.MIN_3_DIGIT, cMax);
-        const inner = b + c;
-        const a = randInt(inner, CONFIG.MAX_3_DIGIT);
-        const answer = a - inner;
-        return make(a, "-", b, "+", c, inner, answer);
-      },
-    ];
-
-    function make(a, outerOp, b, innerOp, c, inner, answer) {
-      return {
-        a, b, c, outerOp, innerOp, inner, answer,
-        text: `${a} ${outerOp} (${b} ${innerOp} ${c})`,
-      };
+    // Section 1 & 2: a ± b, with operands in [min, max]. No negatives.
+    function twoTerm(min, max) {
+      const op = randSign();
+      let a = randInt(min, max);
+      let b = randInt(min, max);
+      if (op === "-" && b > a) {
+        const t = a; a = b; b = t; // swap so a >= b → answer >= 0
+      }
+      const answer = op === "+" ? a + b : a - b;
+      return makeQuestion(`${a} ${op} ${b}`, answer);
     }
 
-    // Build one valid question (retry across builders until success).
-    function one() {
+    // Section 3: a ± b ± c (no parentheses), left-to-right, no negatives.
+    function threeTerm(min, max) {
       for (let attempts = 0; attempts < 50; attempts++) {
-        const builder = builders[randInt(0, builders.length - 1)];
-        const q = builder();
-        if (q && q.answer >= 0 && q.answer <= CONFIG.MAX_3_DIGIT) return q;
+        const a = randInt(min, max);
+        const b = randInt(min, max);
+        const c = randInt(min, max);
+        const op1 = randSign();
+        const op2 = randSign();
+        const step1 = op1 === "+" ? a + b : a - b;
+        if (step1 < 0) continue;
+        const answer = op2 === "+" ? step1 + c : step1 - c;
+        if (answer < 0) continue;
+        return makeQuestion(`${a} ${op1} ${b} ${op2} ${c}`, answer);
       }
       // Guaranteed-valid fallback (should effectively never run).
-      return make(500, "+", 200, "-", 100, 100, 600);
+      return makeQuestion("500 + 300 - 200", 600);
     }
 
-    // Build the full question set.
-    function build(count) {
+    // Section 4: a × b, single-digit operands.
+    function multiply(min, max) {
+      const a = randInt(min, max);
+      const b = randInt(min, max);
+      return makeQuestion(`${a} × ${b}`, a * b);
+    }
+
+    // Build the full question set, section by section.
+    function build() {
+      const n = CONFIG.SECTION_SIZE;
       const list = [];
-      for (let i = 0; i < count; i++) list.push(one());
+      for (let i = 0; i < n; i++) list.push(twoTerm(CONFIG.MIN_2_DIGIT, CONFIG.MAX_2_DIGIT));
+      for (let i = 0; i < n; i++) list.push(twoTerm(CONFIG.MIN_3_DIGIT, CONFIG.MAX_3_DIGIT));
+      for (let i = 0; i < n; i++) list.push(threeTerm(CONFIG.MIN_3_DIGIT, CONFIG.MAX_3_DIGIT));
+      for (let i = 0; i < n; i++) list.push(multiply(CONFIG.MIN_1_DIGIT, CONFIG.MAX_1_DIGIT));
       return list;
     }
 
@@ -376,7 +359,7 @@
     /* ---- Start ---- */
     function start(name) {
       nickname = name;
-      questions = QuestionGen.build(CONFIG.QUESTION_COUNT);
+      questions = QuestionGen.build();
       remaining = CONFIG.TIME_LIMIT_SECONDS;
       startedAt = Date.now();
 
