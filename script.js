@@ -24,6 +24,7 @@
     WARNING_SECONDS: 60,         // last-minute warning animation
     MIN_1_DIGIT: 1,
     MAX_1_DIGIT: 9,
+    MIN_MULT_OPERAND: 3,        // multiplication uses 3-9 (skip easy 1-2 facts)
     MIN_2_DIGIT: 10,
     MAX_2_DIGIT: 99,
     MIN_3_DIGIT: 100,
@@ -76,10 +77,12 @@
        Section 2 (Q11-20): 3-digit  ± 3-digit
        Section 3 (Q21-30): 3-digit  ± 3-digit  ± 3-digit   (no parentheses,
                            evaluated left-to-right)
-       Section 4 (Q31-40): 1-digit  × 1-digit
+       Section 4 (Q31-40): 1-digit  × 1-digit  (operands 3-9 only)
      Constraints:
        - no negative intermediate or final answers
        - operands stay within their stated digit ranges
+       - Section 4 questions are distinct (no repeated multiplication facts,
+         and a×b / b×a are treated as the same fact)
      ---------------------------------------------------------------------- */
   const QuestionGen = (function () {
     function randInt(min, max) {
@@ -92,28 +95,65 @@
       return { text, answer };
     }
 
+    // "Too easy" detection: an add/subtract is trivial when it can be done
+    // column-by-column with no carrying/borrowing (e.g. 40 - 30, 300 + 200,
+    // 47 - 30). Requiring a carry/borrow keeps the questions mentally engaging.
+    function addNeedsCarry(a, b) {
+      while (a > 0 || b > 0) {
+        if ((a % 10) + (b % 10) >= 10) return true;
+        a = Math.floor(a / 10);
+        b = Math.floor(b / 10);
+      }
+      return false;
+    }
+    // Assumes a >= b (true for our subtraction questions).
+    function subNeedsBorrow(a, b) {
+      while (b > 0) {
+        if ((a % 10) < (b % 10)) return true;
+        a = Math.floor(a / 10);
+        b = Math.floor(b / 10);
+      }
+      return false;
+    }
+    // True when a single a (op) b step requires no carry/borrow.
+    function isTrivialStep(a, b, op) {
+      return op === "+" ? !addNeedsCarry(a, b) : !subNeedsBorrow(a, b);
+    }
+
     // Section 1 & 2: a ± b, operands in [min, max].
-    // No negatives, and the answer never exceeds CONFIG.MAX_RESULT.
+    // No negatives, the answer never exceeds CONFIG.MAX_RESULT, and the step
+    // requires a carry/borrow (no trivial round-number questions).
     function twoTerm(min, max) {
       const cap = CONFIG.MAX_RESULT;
-      const op = randSign();
-      if (op === "+") {
-        // Keep a + b <= cap: pick a, then b within the remaining budget.
-        const a = randInt(min, Math.min(max, cap - min));
-        const b = randInt(min, Math.min(max, cap - a));
-        return makeQuestion(`${a} + ${b}`, a + b);
+      for (let attempts = 0; attempts < 100; attempts++) {
+        const op = randSign();
+        if (op === "+") {
+          // Keep a + b <= cap: pick a, then b within the remaining budget.
+          const a = randInt(min, Math.min(max, cap - min));
+          const b = randInt(min, Math.min(max, cap - a));
+          if (isTrivialStep(a, b, "+")) continue;
+          return makeQuestion(`${a} + ${b}`, a + b);
+        }
+        // Subtraction: swap so a >= b → answer >= 0 (always <= cap).
+        let a = randInt(min, max);
+        let b = randInt(min, max);
+        if (b > a) {
+          const t = a; a = b; b = t;
+        }
+        if (isTrivialStep(a, b, "-")) continue;
+        return makeQuestion(`${a} - ${b}`, a - b);
       }
-      // Subtraction: swap so a >= b → answer >= 0 (always <= cap).
-      let a = randInt(min, max);
-      let b = randInt(min, max);
-      if (b > a) {
-        const t = a; a = b; b = t;
-      }
+      // Guaranteed-borrow fallback within the digit range (effectively never
+      // reached): a multiple of 10 minus a value with a nonzero ones digit.
+      const a = Math.floor(Math.min(max, cap) / 10) * 10;
+      let b = min % 10 === 0 ? min + 1 : min;
+      if (b > a) b = a - 1;
       return makeQuestion(`${a} - ${b}`, a - b);
     }
 
     // Section 3: a ± b ± c (no parentheses), evaluated left-to-right.
-    // Every step stays within [0, CONFIG.MAX_RESULT].
+    // Every step stays within [0, CONFIG.MAX_RESULT], and at least one step
+    // requires a carry/borrow so the whole question isn't trivial.
     function threeTerm(min, max) {
       const cap = CONFIG.MAX_RESULT;
       for (let attempts = 0; attempts < 100; attempts++) {
@@ -126,17 +166,43 @@
         if (step1 < 0 || step1 > cap) continue;
         const answer = op2 === "+" ? step1 + c : step1 - c;
         if (answer < 0 || answer > cap) continue;
+        // Skip if both steps are trivial (no carry/borrow anywhere).
+        if (isTrivialStep(a, b, op1) && isTrivialStep(step1, c, op2)) continue;
         return makeQuestion(`${a} ${op1} ${b} ${op2} ${c}`, answer);
       }
       // Guaranteed-valid fallback (should effectively never run).
       return makeQuestion("500 + 300 - 200", 600);
     }
 
-    // Section 4: a × b, single-digit operands.
+    // Section 4: a × b, operands 3-9 (the easy 1-2 facts are excluded).
     function multiply(min, max) {
       const a = randInt(min, max);
       const b = randInt(min, max);
       return makeQuestion(`${a} × ${b}`, a * b);
+    }
+
+    // Dedupe key for a multiplication question: sort operands so that
+    // a×b and b×a count as the same fact (e.g. "7 × 8" and "8 × 7").
+    function multKey(q) {
+      return q.text.split(" × ").map(Number).sort((a, b) => a - b).join("x");
+    }
+
+    // Collect `count` distinct questions from `gen`, skipping duplicates by
+    // `keyOf`. Falls back to allowing repeats only if the pool is too small to
+    // fill `count` (shouldn't happen for the current sections).
+    function collectDistinct(count, gen, keyOf) {
+      const seen = new Set();
+      const out = [];
+      const maxAttempts = count * 50;
+      for (let i = 0; i < maxAttempts && out.length < count; i++) {
+        const q = gen();
+        const key = keyOf(q);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push(q);
+      }
+      while (out.length < count) out.push(gen());
+      return out;
     }
 
     // Build the full question set, section by section.
@@ -146,7 +212,12 @@
       for (let i = 0; i < n; i++) list.push(twoTerm(CONFIG.MIN_2_DIGIT, CONFIG.MAX_2_DIGIT));
       for (let i = 0; i < n; i++) list.push(twoTerm(CONFIG.MIN_3_DIGIT, CONFIG.MAX_3_DIGIT));
       for (let i = 0; i < n; i++) list.push(threeTerm(CONFIG.MIN_3_DIGIT, CONFIG.MAX_3_DIGIT));
-      for (let i = 0; i < n; i++) list.push(multiply(CONFIG.MIN_1_DIGIT, CONFIG.MAX_1_DIGIT));
+      const mult = collectDistinct(
+        n,
+        () => multiply(CONFIG.MIN_MULT_OPERAND, CONFIG.MAX_1_DIGIT),
+        multKey
+      );
+      mult.forEach((q) => list.push(q));
       return list;
     }
 
